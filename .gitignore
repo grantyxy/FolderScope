@@ -1,0 +1,29 @@
+# Compiled files and local output
+*.exe
+*.dll
+*.pdb
+bin/
+obj/
+dist/
+test-output/
+artifacts/
+.vs/
+*.user
+*.suo
+
+# Local scan data, logs and credentials
+*.fsscan
+*.events.txt
+*.log
+settings.xml
+history.xml
+jobs/
+.env
+.env.*
+*.pfx
+*.pem
+*.key
+
+# Release archives are uploaded to GitHub Releases
+*.zip
+SHA256SUMS.txt

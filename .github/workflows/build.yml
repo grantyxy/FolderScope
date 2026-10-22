@@ -1,0 +1,35 @@
+name: Windows build and self-test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build
+        shell: pwsh
+        run: ./build.ps1
+      - name: Run built-in self-tests
+        shell: pwsh
+        run: |
+          $testDir = Join-Path $env:RUNNER_TEMP 'FolderScope-self-test'
+          $process = Start-Process -FilePath ./FolderScope.exe -ArgumentList @('--self-test', ('"' + $testDir + '"')) -Wait -PassThru
+          $report = Join-Path $testDir 'test-results.txt'
+          if (Test-Path -LiteralPath $report) { Get-Content -LiteralPath $report }
+          if ($process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $report)) { throw "Self-test failed: $($process.ExitCode)" }
+      - name: Upload self-test summary
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: self-test-summary
+          path: ${{ runner.temp }}/FolderScope-self-test/test-results.txt
+          if-no-files-found: ignore

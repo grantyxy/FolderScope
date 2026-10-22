@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FolderScope 功能与验证</title>
+<style>body{font:16px/1.8 "Microsoft YaHei UI",sans-serif;max-width:1050px;margin:40px auto;padding:0 24px;color:#25323d}a{color:#0878b7}table{border-collapse:collapse;width:100%}td,th{border:1px solid #dbe4ea;padding:12px;text-align:left;vertical-align:top}th{background:#edf6fc}</style></head>
+<body><p><a href="使用说明.html">中文说明</a> · <a href="UserGuide.html">English guide</a> · <a href="https://github.com/grantyxy/FolderScope">GitHub</a></p>
+<h1>FolderScope 功能与验证</h1><p>v1.0.0-preview.1 · 2026-10-23 · Windows x64</p>
+<p>FolderSizes 的开源替代品，基于 C# / .NET Framework 完全重写，支持简体中文和英文。本项目采用独立实现；“完全重写”不表示所有功能、界面细节和文件格式均与 FolderSizes 相同。</p>
+<p>本次从发布源码重新编译，在 Windows 11 x64 普通用户权限下运行内置自检，结果为 <strong>29 / 29 项通过</strong>。详细结果见 <a href="验证结果.txt">验证结果.txt</a>。下表区分代码已有能力和本次实际验证范围。</p>
+<table><tr><th>范围</th><th>当前实现</th><th>验证与限制</th></tr>
+<tr><td>双语与界面</td><td>简体中文 / English、浅色 / 深色主题、功能区、路径栏、目录树、明细。</td><td>自检覆盖双语资源和导出标签。本次未重新进行完整图形界面验收。报告窗口短暂空白现象已有反馈，未完成修复验收。</td></tr>
+<tr><td>扫描</td><td>NTFS MFT 读取与并行目录枚举；多路径、过滤、暂停、取消和事件日志。</td><td>普通权限下验证了枚举统计、路径合并、过滤、取消和长中文路径。MFT 一般需要管理员权限，条件不满足时回退；MFT 复杂场景和大规模性能尚未全面验证。</td></tr>
+<tr><td>图表</td><td>柱状图、饼图、旭日图、矩形树图，支持下钻与 PNG 导出。</td><td>代码包含实现，本次未重新逐一验证窗口交互。未实现完整停靠 / 浮动面板系统。</td></tr>
+<tr><td>报告与搜索</td><td>17 类报告，元数据与 SHA-256 重复检测；规则搜索和扫描过滤。</td><td>报告生成、重复匹配、规则优先级、目录范围与空目录判断已自检通过。包含规则按 OR 组合，尚无完整复杂条件组。</td></tr>
+<tr><td>快照与导出</td><td>.fsscan 快照、比较、历史；XLSX、CSV、HTML、PDF、XML、TXT 导出。</td><td>快照往返、差异和导出基本结构通过自检。自有快照格式不兼容 FolderSizes；PDF 为位图，文字不可搜索或复制。</td></tr>
+<tr><td>文件操作</td><td>复制、移动、重命名、回收站、ZIP 归档与操作日志。</td><td>受控样本的复制和 ZIP 通过自检。未针对用户现有文件执行移动或删除测试。ZIP 不提供加密。</td></tr>
+<tr><td>自动化与网络</td><td>命令行、计划任务、共享枚举与 SMTP 邮件。</td><td>本次验证作业 XML 和命令行本地扫描导出；真实网络共享、邮件投递、定时触发尚未验收。</td></tr>
+</table>
+<p>大小合计不能直接解释为卷的去重物理占用；硬链接、文件系统元数据、压缩 / 稀疏文件、重解析点和权限均可能影响结果。请结合事件日志判断扫描是否完整。</p>
+<p>自动构建与测试结果可查看 <a href="https://github.com/grantyxy/FolderScope/actions">GitHub Actions</a>。采用 MIT 许可证；完整源码与构建脚本在项目仓库中。</p>
+</body></html>
