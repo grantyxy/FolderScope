@@ -1,86 +1,87 @@
 # FolderScope
 
-**FolderSizes 的开源替代品，基于 C# / .NET Framework 完全重写，支持简体中文和英文界面。**
+**Windows 磁盘空间分析工具：快速找出空间被什么占用。**
 
-[English](README.en.md) · [下载预览版](https://github.com/grantyxy/FolderScope/releases) · [构建检查](https://github.com/grantyxy/FolderScope/actions/workflows/build.yml) · [MIT 许可证](LICENSE)
+[![构建与自检](https://github.com/grantyxy/FolderScope/actions/workflows/build.yml/badge.svg)](https://github.com/grantyxy/FolderScope/actions/workflows/build.yml)
+[![最新版本](https://img.shields.io/github/v/release/grantyxy/FolderScope?label=%E4%B8%8B%E8%BD%BD)](https://github.com/grantyxy/FolderScope/releases/latest)
+[![MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-FolderScope 是一款 Windows 磁盘空间分析工具：查看文件夹占用、定位大文件与重复文件、生成报告，并通过图表了解存储分布。功能与布局参考 [FolderSizes](https://www.foldersizes.com/)，以独立代码实现；当前版本包含经过 Claude 协助重写与优化的界面和扫描引擎。
+[English](README.en.md)
 
-项目不依赖 FolderSizes 的安装、DLL 或许可证，与其无隶属关系。“完全重写”指独立实现代码；当前预览版不承诺所有功能、界面细节或文件格式与 FolderSizes 一致。
+FolderScope 能在几秒内扫描整块磁盘，按大小列出每个文件夹和文件，用矩形树图、旭日图等图表直观展示空间分布，并提供大文件、重复文件、文件类型等 17 类报告。界面支持简体中文和英文，随时切换。
+
+![FolderScope 文件夹矩形图](docs/images/treemap-zh.png)
+
+## 亮点
+
+- **扫描快**：多线程目录枚举，一次系统调用读取上百个条目，不逐个打开文件；以管理员身份运行时直接读取 NTFS 主文件表（MFT），大容量磁盘更快。
+- **一眼看懂**：明细表、柱状图、环形饼图、旭日图、文件夹矩形图五种视图，双击任意区域即可进入对应文件夹。
+- **找到该删的文件**：最大文件、最旧文件、临时文件、空文件夹、超长路径、按内容（SHA-256）比对的重复文件等 17 类报告。
+- **熟悉的操作**：Office 风格功能区、资源管理器同款文件图标、右键直接打开 / 定位 / 复制 / 移动 / 移入回收站 / 压缩。
+- **可以留存和对比**：保存扫描快照，离线查看，对比两次扫描找出增长最快的目录。
+- **导出与自动化**：XLSX、CSV、HTML、PDF、XML、TXT 报告；命令行扫描；配合 Windows 计划任务定期生成报告并发送邮件。
+
+## 截图
+
+| 扫描明细 | 旭日图 |
+| --- | --- |
+| ![明细](docs/images/details-zh.png) | ![旭日图](docs/images/sunburst-zh.png) |
+| **此电脑** | **文件报告** |
+| ![此电脑](docs/images/this-pc-zh.png) | ![文件报告](docs/images/file-reports-zh.png) |
 
 ## 下载与运行
 
-1. 打开 [Releases](https://github.com/grantyxy/FolderScope/releases)，下载 `FolderScope-v1.0.0-preview.1-win-x64.zip`。
-2. 解压到可写目录，双击 `FolderScope.exe`。请保留同目录的 `FolderScope.exe.config` 和中英文帮助文件。
-3. 在右上角 **中文 / EN** 菜单切换语言；语言选择会保存，已有扫描结果会保留。
+1. 在 [Releases](https://github.com/grantyxy/FolderScope/releases/latest) 下载 `FolderScope-v1.0.0-win-x64.zip`。
+2. 解压到任意目录，双击 `FolderScope.exe`。请保留同目录下的 `FolderScope.exe.config`。
+3. 选择一个磁盘或文件夹开始扫描；右上角 **中文 / EN** 可切换界面语言。
 
-面向 **Windows 10 / 11 x64**，需要 **.NET Framework 4.8**。运行不需要 Python、Node.js 或独立服务。本次本地验证环境为 Windows 11 x64；其他 Windows 版本未做完整兼容性验收。
+**系统要求**：Windows 10 / 11（x64），.NET Framework 4.8（Windows 10 1903 及以上已自带）。绿色免安装，不写注册表。
 
-## 主要功能
+## 两种扫描方式
 
-| 功能 | 当前实现 |
-| --- | --- |
-| 双语界面 | 简体中文 / English，包含菜单、报告、导出表头及主要提示；浅色 / 深色主题 |
-| 双扫描引擎 | 本地 NTFS MFT 读取，以及并行目录枚举；不满足条件时回退到目录枚举 |
-| 扫描控制 | 多路径合并、暂停 / 继续 / 取消、过滤、深度限制、事件日志、可选所有者采集 |
-| 可视化 | 柱状图、饼图、旭日图、矩形树图，支持文件夹下钻和 PNG 导出 |
-| 文件报告 | 17 类，包括最大、最旧、最新、临时、重复、类型、分类、属性、所有者、大小、名称、时间、深度、年份、非业务文件、空文件夹、超长路径 |
-| 重复检测 | 按名称、名称与大小、名称 / 大小 / 修改时间，或 SHA-256 内容比较 |
-| 搜索与过滤 | 通配符、正则表达式、大小、占用空间、路径长度、文件数等条件；排除优先 |
-| 快照与比较 | 自有 `.fsscan` 元数据快照、离线查看、快照差异、多时间点比较、磁盘历史 |
-| 报告导出 | XLSX、CSV、HTML、PDF、XML、TXT；打印预览 |
-| 文件操作 | 打开、定位、复制、移动、重命名、移入回收站、ZIP 归档 |
-| 自动化 | 命令行扫描、Windows 计划任务、网络共享枚举、SMTP 邮件报告 |
+| 方式 | 何时使用 | 说明 |
+| --- | --- | --- |
+| NTFS MFT 直读 | 以管理员身份运行，扫描本地 NTFS 磁盘 | 顺序读取整张主文件表并在内存中重建目录树，能看到普通权限无法进入的系统目录 |
+| 并行目录枚举 | 其他所有情况（普通权限、网络路径、exFAT / FAT32 等） | 多线程遍历目录，无需管理员权限 |
 
-### 关于 MFT 扫描
+程序会自动选择，扫描结束后状态栏显示实际使用的方式和耗时。需要 MFT 模式时，可点击功能区 **工具 → 管理员运行**；也可以在 **选项 → 扫描** 中关闭 MFT 直读。
 
-默认启用“使用 NTFS MFT 直接读取”。读取本地 NTFS 卷的 MFT 通常需要管理员权限；可在界面的“以管理员身份运行”入口启动。普通权限、网络路径、不支持的文件系统或 MFT 读取失败时，使用目录枚举。扫描结束后的状态栏显示实际采用的引擎。
-
-即使只选择卷内的一个文件夹，MFT 模式仍可能读取整个卷的 MFT，再筛选目标目录。它不保证在所有目录和存储设备上都更快。本次本地自检使用普通用户权限，验证的是目录枚举路径，尚未对 MFT 引擎进行完整验收或发布性能比较。
-
-## 从源码构建
-
-使用 Windows 自带的 .NET Framework C# 编译器，不需要 NuGet 包或 Visual Studio 项目文件：
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
-```
-
-产物为仓库根目录的 `FolderScope.exe`。源代码位于 `src/`；程序配置和清单分别是 `FolderScope.exe.config`、`app.manifest`。
-
-运行内置自检：
-
-```powershell
-$testDir = Join-Path $env:TEMP ('FolderScope-tests-' + [guid]::NewGuid().ToString('N'))
-$process = Start-Process -FilePath .\FolderScope.exe -ArgumentList @('--self-test', ('"' + $testDir + '"')) -Wait -PassThru
-Get-Content (Join-Path $testDir 'test-results.txt')
-if ($process.ExitCode -ne 0) { throw 'FolderScope self-test failed' }
-```
-
-自检在指定目录中生成测试文件、快照和报告。2026-10-23 发布准备时，本地重新编译后 **29 / 29 项通过**；摘要见 [验证结果.txt](验证结果.txt)。这些检查覆盖扫描统计、过滤、重复检测、快照、导出、复制、ZIP 和双语资源，不代表所有界面与环境相关功能均已验收。GitHub Actions 会重新构建并执行同一套自检。
-
-## 命令行示例
+## 命令行
 
 ```text
 FolderScope.exe --scan "D:\Data" --snapshot "D:\Reports\scan.fsscan" --export "D:\Reports\details.xlsx"
 FolderScope.exe --scan "D:\Data|E:\Data" --report "Largest Files" --export "D:\Reports\large.csv"
 FolderScope.exe --scan "D:\Data" --report "Duplicate Files" --duplicate-mode "Content (SHA-256)" --export "D:\Reports\duplicates.html"
+FolderScope.exe --benchmark C:\
 ```
 
-报告名称使用固定英文标识符。退出码为 `0`（运行结束）、`1`（错误）、`3`（取消）；即使退出码为 `0`，也应查看相邻 `.events.txt` 文件中的跳过、权限或不完整扫描信息。PowerShell 中需要等待程序结束时，请使用 `Start-Process -Wait -PassThru`。
+- 多个路径用 `|` 分隔；报告名称使用英文标识（如 `Largest Files`、`File Types`、`Duplicate Files`）。
+- 退出码：`0` 完成、`1` 出错、`3` 已取消。被跳过或无权访问的项目会写入同名的 `.events.txt`。
+- `--benchmark` 会分别用两种扫描方式扫描指定路径，并生成耗时和结果对比报告。
 
-## 当前边界
+## 从源码构建
 
-- 这是首个开源预览版。文件报告窗口首次显示时的短暂空白现象曾被报告，本次发布未对该现象完成复现或修复验收。
-- 快照使用 FolderScope 自有格式，不兼容 FolderSizes 快照。未实现完整的停靠 / 浮动面板、所有高级规则、容量预测或加密 ZIP。
-- 文件大小合计不等于卷实际物理占用；文件系统元数据、硬链接、压缩 / 稀疏文件和权限都会影响解释。MFT 模式的复杂 NTFS 场景仍需要更多验证。
-- 元数据相同不代表文件内容相同；需要内容比较时使用 SHA-256。目录重解析点不跟随，避免循环遍历。
-- PDF 使用位图页面，文本不可搜索或复制；完整路径宜导出为 XLSX、CSV 或 XML。
-- 网络共享、真实 SMTP 投递、计划任务定时触发和大规模磁盘性能尚未在本次发布中验收。删除、移动等操作也未针对用户现有文件做破坏性测试。
-- 设置、历史、作业和日志保存在 `%LOCALAPPDATA%\FolderScope`。提交问题时请去除个人路径、邮箱、共享地址和凭据。
+只需要 Windows 自带的 .NET Framework 编译器，不依赖 Visual Studio 或 NuGet：
 
-中英文离线帮助包含更具体的使用方式；源代码、许可证和构建脚本均在本仓库内。
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
+```
+
+编译结果为仓库根目录下的 `FolderScope.exe`，源码位于 `src/`。运行内置自检：
+
+```powershell
+$dir = Join-Path $env:TEMP 'FolderScope-tests'
+Start-Process .\FolderScope.exe -ArgumentList '--self-test', "`"$dir`"" -Wait
+Get-Content (Join-Path $dir 'test-results.txt')
+```
+
+## 说明
+
+- 设置、磁盘历史和日志保存在 `%LOCALAPPDATA%\FolderScope`，删除该目录即可恢复默认。
+- 文件大小合计不完全等于磁盘实际占用：硬链接、压缩 / 稀疏文件和文件系统元数据都会带来差异。
+- 快照文件（`.fsscan`）为 FolderScope 自有格式。PDF 导出为图片页面，需要可复制的完整路径时请导出 XLSX 或 CSV。
+- 删除操作默认移入回收站；移动、重命名前会检查文件在扫描后是否发生变化。
 
 ## 许可证
 
-[MIT](LICENSE)。FolderSizes 名称用于说明项目参考对象；其商标和相关权利归各自权利人所有。
+[MIT](LICENSE)
