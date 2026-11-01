@@ -41,7 +41,7 @@ FolderScope 扫描磁盘或指定文件夹，按大小列出文件夹和文件�
 
 ## 下载与运行
 
-1. 在 [Releases](https://github.com/grantyxy/FolderScope/releases/latest) 下载 `FolderScope-v1.1.0-win-x64.zip`。
+1. 在 [Releases](https://github.com/grantyxy/FolderScope/releases/latest) 下载 `FolderScope-v1.1.1-win-x64.zip`。
 2. 解压到任意目录，双击 `FolderScope.exe`。请保留同目录下的 `FolderScope.exe.config`。
 3. 选择一个磁盘或文件夹开始扫描；右上角 **中文 / EN** 可切换界面语言。
 

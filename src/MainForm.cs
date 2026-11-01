@@ -75,16 +75,19 @@ namespace FolderScope {
    chrome.LeftReserve=D(34)+D(30)*3;
 
    // Tab row
-   menu=new ToolStrip{Dock=DockStyle.Top,GripStyle=ToolStripGripStyle.Hidden,Tag="noline",BackColor=Palette.Panel,AutoSize=false,Height=D(30),Padding=new Padding(D(4),0,D(6),0),CanOverflow=false,ImageScalingSize=new Size(D(16),D(16))};
+   menu=new ToolStrip{Dock=DockStyle.Fill,GripStyle=ToolStripGripStyle.Hidden,Tag="noline",BackColor=Palette.Panel,AutoSize=false,Height=D(30),Padding=new Padding(D(4),0,D(6),0),CanOverflow=false,ImageScalingSize=new Size(D(16),D(16))};
    var file=new ToolStripDropDownButton(L.T("File")){Tag="file",ShowDropDownArrow=false,AutoSize=false,Size=new Size(D(58),D(27)),Margin=new Padding(0,D(3),D(4),0)};
    AddMenu(file,"Load Results","load",LoadSnapshot);AddMenu(file,"Save Results","save",SaveSnapshot);file.DropDownItems.Add(new ToolStripSeparator());AddMenu(file,"Export","export",()=>ExportDetails());AddMenu(file,"Print","print",()=>Print());file.DropDownItems.Add(new ToolStripSeparator());AddMenu(file,"Options","settings",ShowOptions);AddMenu(file,"Close",null,Close);menu.Items.Add(file);
    foreach(string tab in new[]{"Home","Tools","Help","Detail View"}){string a=tab;string text=L.T(tab);var b=new ToolStripButton(text){Name=tab,Tag="tab",Checked=activeRibbon==tab,AutoSize=false,Size=new Size(TextRenderer.MeasureText(text,Font).Width+D(26),D(27)),Margin=new Padding(0,D(3),D(2),0)};b.Click+=(s,e)=>SelectRibbon(a);menu.Items.Add(b);}
    command=new SearchBox("Tell me what you want to do..."){Glyph="\uEA80",GlyphColor=Color.FromArgb(230,160,20),Font=Font};
    command.Box.KeyDown+=(s,e)=>{if(e.KeyCode==Keys.Enter){string q=command.Text.Trim();if(q.Length==0)return;string match=Reports.Names.FirstOrDefault(n=>L.T(n).IndexOf(q,StringComparison.OrdinalIgnoreCase)>=0||n.IndexOf(q,StringComparison.OrdinalIgnoreCase)>=0);if(match!=null)OpenReports(match);else ShowSearch();e.Handled=true;e.SuppressKeyPress=true;}};
    menu.Items.Add(new ToolStripControlHost(command){AutoSize=false,Size=new Size(D(270),D(24)),Margin=new Padding(D(18),D(3),0,0)});
-   var compact=new ToolStripButton(L.T("Compact")){Alignment=ToolStripItemAlignment.Right,Margin=new Padding(D(2),D(3),0,0)};compact.Click+=(s,e)=>ToggleCompact();menu.Items.Add(compact);
-   var language=new ToolStripDropDownButton("中文 / EN"){Alignment=ToolStripItemAlignment.Right,Margin=new Padding(D(2),D(3),0,0)};var zh=new ToolStripMenuItem("简体中文"){Checked=L.Chinese};zh.Click+=(s,e)=>ChangeLanguage(true);var en=new ToolStripMenuItem("English"){Checked=!L.Chinese};en.Click+=(s,e)=>ChangeLanguage(false);language.DropDownItems.Add(zh);language.DropDownItems.Add(en);menu.Items.Add(language);
-   var theme=new ToolStripDropDownButton(L.T("Theme")){Alignment=ToolStripItemAlignment.Right,Margin=new Padding(D(2),D(3),0,0)};foreach(string name in new[]{"Light (Blue)","Dark (Blue)","Light (Red)","Light (Green)","Light (Orange)","Light (Purple)"}){string n=name;var i=new ToolStripMenuItem(L.T(n)){Checked=Settings.Theme==n};i.Click+=(s,e)=>{Settings.Theme=n;Settings.Save();Palette.Set(n);ToolStripManager.Renderer=new ModernRenderer();Build();};theme.DropDownItems.Add(i);}menu.Items.Add(theme);
+   var compact=new ToolStripButton(L.T("Compact")){Margin=new Padding(D(2),D(3),0,0)};compact.Click+=(s,e)=>ToggleCompact();
+   var language=new ToolStripDropDownButton("中文 / EN"){Margin=new Padding(D(2),D(3),0,0)};var zh=new ToolStripMenuItem("简体中文"){Checked=L.Chinese};zh.Click+=(s,e)=>ChangeLanguage(true);var en=new ToolStripMenuItem("English"){Checked=!L.Chinese};en.Click+=(s,e)=>ChangeLanguage(false);language.DropDownItems.Add(zh);language.DropDownItems.Add(en);
+   var theme=new ToolStripDropDownButton(L.T("Theme")){Margin=new Padding(D(2),D(3),0,0)};foreach(string name in new[]{"Light (Blue)","Dark (Blue)","Light (Red)","Light (Green)","Light (Orange)","Light (Purple)"}){string n=name;var i=new ToolStripMenuItem(L.T(n)){Checked=Settings.Theme==n};i.Click+=(s,e)=>{Settings.Theme=n;Settings.Save();Palette.Set(n);ToolStripManager.Renderer=new ModernRenderer();Build();};theme.DropDownItems.Add(i);}
+   // Right-aligned items in this ToolStrip made UI Automation sibling navigation loop on .NET Framework 4.8 and froze the app.
+   var menuRight=NavStrip(DockStyle.Right);menuRight.Items.AddRange(new ToolStripItem[]{theme,language,compact});
+   var menuBar=new Panel{Dock=DockStyle.Top,Height=D(30),Padding=new Padding(0,0,D(6),0),BackColor=Palette.Panel,Tag="keep"};menuBar.Controls.Add(menu);menuBar.Controls.Add(menuRight);
    menu.LayoutCompleted+=(s,e)=>UpdateGap();
 
    // Ribbon
@@ -157,7 +160,7 @@ namespace FolderScope {
    hint=new HintLine();info=new InfoPanel{Font=Font};info.TitleClicked+=()=>{if(CurrentPath==null){try{Process.Start("control.exe","system");}catch{}}else if(!Offline&&Directory.Exists(CurrentPath))UI.Shell(CurrentPath);};
    contentBox.Controls.Add(content);contentBox.Controls.Add(computer);contentBox.Controls.Add(hint);contentBox.Controls.Add(info);split.Panel2.Controls.Add(contentBox);
 
-   Controls.Add(body);Controls.Add(navBar);Controls.Add(ribbonHost);Controls.Add(menu);Controls.Add(chrome);Controls.Add(stat);
+   Controls.Add(body);Controls.Add(navBar);Controls.Add(ribbonHost);Controls.Add(menuBar);Controls.Add(chrome);Controls.Add(stat);
    if(Data!=null){PopulateScan();if(CurrentPath!=null&&Data.Index.ContainsKey(CurrentPath))Navigate(CurrentPath,false);else ShowComputer();}else ShowComputer();
    UpdateCounts();UpdateFilter();
    if(constructed)Bounds=oldBounds;

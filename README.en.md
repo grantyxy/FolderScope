@@ -35,7 +35,7 @@ See the [comparison record](docs/foldersizes-comparison.md) and [FolderSizes rel
 
 ## Download and run
 
-1. Download `FolderScope-v1.1.0-win-x64.zip` from [Releases](https://github.com/grantyxy/FolderScope/releases/latest).
+1. Download `FolderScope-v1.1.1-win-x64.zip` from [Releases](https://github.com/grantyxy/FolderScope/releases/latest).
 2. Extract it anywhere and run `FolderScope.exe`. Keep `FolderScope.exe.config` next to it.
 3. Pick a drive or folder to scan. Use **中文 / EN** in the top-right corner to change the language.
 
