@@ -69,6 +69,7 @@ namespace FolderScope {
   public bool ReadOwners=false;
   public bool SkipHidden=false;
   public bool SkipSystem=false;
+  public bool SkipCloudPlaceholders=false;
   public string Include="*";
   public string Exclude="";
   public string ExcludeFolders="";
@@ -109,7 +110,13 @@ namespace FolderScope {
    }
    KeyValuePair<PathIndex,HashSet<Entry>> r;try{r=build.Result;}catch(AggregateException ex){throw ex.GetBaseException();}
    dup=r.Value;
-   if(dup!=null){foreach(var a in children.Values)a.RemoveAll(dup.Contains);entries.RemoveAll(dup.Contains);}
+   if(dup!=null){
+    const string message="Case-insensitive path collision: entry omitted; results are partial.";
+    var logged=new HashSet<string>(Events.Where(e=>e.Message==message).Select(e=>e.Path),StringComparer.Ordinal);
+    foreach(Entry e in dup)if(logged.Add(e.Path))Events.Add(new ScanEvent{Path=e.Path,Message=message});
+    foreach(string root in Roots){Entry e;if(r.Key.TryGetValue(root,out e))e.Incomplete=true;}
+    foreach(var a in children.Values)a.RemoveAll(dup.Contains);entries.RemoveAll(dup.Contains);
+   }
    Index=r.Key;Children=children;
   }
   public void Aggregate() {
@@ -166,6 +173,14 @@ namespace FolderScope {
   [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern IntPtr CreateFileW(string file,uint access,uint share,IntPtr security,uint disposition,uint flags,IntPtr template);
   [DllImport("kernel32.dll",SetLastError=true)] static extern bool GetFileInformationByHandleEx(IntPtr h,int info,out StandardInfo data,uint size);
   [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
+  [StructLayout(LayoutKind.Sequential)] public struct ContentFileInfo {
+   public uint Attributes;public System.Runtime.InteropServices.ComTypes.FILETIME Created,Accessed,Modified;
+   public uint VolumeSerial,SizeHigh,SizeLow,Links,IndexHigh,IndexLow;
+  }
+  [DllImport("kernel32.dll",EntryPoint="CreateFileW",CharSet=CharSet.Unicode,SetLastError=true)] public static extern Microsoft.Win32.SafeHandles.SafeFileHandle OpenContentFile(string path,uint access,uint share,IntPtr security,uint disposition,uint flags,IntPtr template);
+  [DllImport("kernel32.dll",SetLastError=true)] public static extern bool GetFileInformationByHandle(Microsoft.Win32.SafeHandles.SafeFileHandle handle,out ContentFileInfo info);
+  public static bool IsCloudPlaceholder(int attributes,bool directoryEnumeration){return (attributes&(0x1000|0x400000|(directoryEnumeration?0x40000:0)))!=0;}
+  public static bool TryGetDirectoryAttributes(string path,out int attributes){FindData data;IntPtr h=FindFirstFileExW(Util.LongPath(path),1,out data,0,IntPtr.Zero,0);attributes=0;if(h==new IntPtr(-1))return false;try{attributes=(int)data.Attr;return true;}finally{FindClose(h);}}
   public static bool Allocation(string path,out long bytes){bytes=0;IntPtr h=CreateFileW(Util.LongPath(path),0,7,IntPtr.Zero,3,0x00200000,IntPtr.Zero);if(h==new IntPtr(-1))return false;try{StandardInfo info;if(!GetFileInformationByHandleEx(h,1,out info,(uint)Marshal.SizeOf(typeof(StandardInfo))))return false;bytes=info.AllocationSize;return true;}finally{CloseHandle(h);}}
   public static DateTime Time(System.Runtime.InteropServices.ComTypes.FILETIME t){try{return DateTime.FromFileTimeUtc(((long)t.dwHighDateTime<<32)|(uint)t.dwLowDateTime);}catch{return DateTime.MinValue;}}
  }
@@ -210,6 +225,7 @@ namespace FolderScope {
   public static string AgeBucket(DateTime d){double days=(DateTime.UtcNow-d).TotalDays;return days<1?"Today":days<7?"1 - 7 days":days<30?"7 - 30 days":days<90?"1 - 3 months":days<365?"3 - 12 months":days<1095?"1 - 3 years":">= 3 years";}
   public static ReportRow Row(Entry e){return new ReportRow{Name=e.Name,Size=e.Size,Allocated=e.Allocated,Count=e.Folder?e.Files:1,Path=e.Path,Owner=e.Owner,Modified=e.Modified,Extra=e.AttrText+(e.Skipped?" [skipped]":e.Incomplete?" [partial]":""),Source=e};}
   public static List<ReportRow> Build(Snapshot s,string kind,int limit,string duplicateMode,CancellationToken token) {
+   token.ThrowIfCancellationRequested();
    var files=s.Entries.Where(e=>!e.Folder).ToList();IEnumerable<Entry> seq=files;Func<Entry,string> group=null;
    switch(kind){
     case "Largest Files":seq=files.OrderByDescending(e=>e.Size);break;
@@ -228,23 +244,61 @@ namespace FolderScope {
     case "File Ages":group=e=>AgeBucket(e.Modified);break;
     case "File Depths":group=e=>"Depth "+e.Depth;break;
     case "File Years":group=e=>e.Modified.Year.ToString();break;
-    case "Duplicate Files":var duplicates=Duplicates(files,duplicateMode,token);double allBytes=files.Sum(e=>e.Size);foreach(var duplicate in duplicates)duplicate.Percent=allBytes==0?0:duplicate.Size*100.0/allBytes;return duplicates;
+    case "Duplicate Files":
+     if(duplicateMode=="Content (SHA-256)")s.Events.RemoveAll(e=>e.Message==ContentSkippedMessage);
+     var skipped=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+     var duplicates=Duplicates(files,duplicateMode,token,e=>{if(skipped.Add(e.Path))s.Events.Add(new ScanEvent{Path=e.Path,Message=ContentSkippedMessage});});
+     double allBytes=files.Sum(e=>e.Size);foreach(var duplicate in duplicates){token.ThrowIfCancellationRequested();duplicate.Percent=allBytes==0?0:duplicate.Size*100.0/allBytes;}return duplicates;
    }
    List<ReportRow> rows;
    if(group!=null)rows=files.GroupBy(group,StringComparer.OrdinalIgnoreCase).Select(g=>new ReportRow{Name=g.Key,LocalizeName=kind!="File Names"&&(kind!="File Owners"||g.Key=="(owner not collected)"),AttributeName=kind=="File Attributes",Size=g.Sum(e=>e.Size),Allocated=g.Sum(e=>e.Allocated),Count=g.LongCount(),Extra="",Path=""}).OrderByDescending(r=>r.Size).ToList();
    else rows=(limit>0?seq.Take(limit):seq).Select(Row).ToList();
-   double total=files.Sum(e=>e.Size);foreach(var r in rows)r.Percent=total==0?0:r.Size*100.0/total;return rows;
+   double total=files.Sum(e=>e.Size);foreach(var r in rows){token.ThrowIfCancellationRequested();r.Percent=total==0?0:r.Size*100.0/total;}token.ThrowIfCancellationRequested();return rows;
   }
-  public static List<ReportRow> Duplicates(List<Entry> files,string mode,CancellationToken token) {
+  public const string ContentSkippedMessage="Duplicate content not read: offline/cloud, reparse-point, skipped or incomplete file.";
+  public static bool ContentReadable(Entry e){return !e.Folder&&!e.Skipped&&!e.Incomplete&&(e.Attributes&(int)FileAttributes.ReparsePoint)==0&&!Native.IsCloudPlaceholder(e.Attributes,false);}
+  public static List<ReportRow> Duplicates(List<Entry> files,string mode,CancellationToken token){return Duplicates(files,mode,token,null);}
+  private static List<ReportRow> Duplicates(List<Entry> files,string mode,CancellationToken token,Action<Entry> skipped) {
+   token.ThrowIfCancellationRequested();
    var rows=new List<ReportRow>();int id=0;IEnumerable<IGrouping<string,Entry>> groups;
    if(mode=="Content (SHA-256)"){
-    var hashes=new List<KeyValuePair<string,Entry>>();
-    foreach(var candidates in files.Where(e=>!e.Skipped).GroupBy(e=>e.Size).Where(g=>g.Count()>1))foreach(Entry e in candidates){token.ThrowIfCancellationRequested();try{var before=new FileInfo(e.Path);if(before.Length!=e.Size||before.LastWriteTimeUtc!=e.Modified)continue;using(var stream=new FileStream(e.Path,FileMode.Open,FileAccess.Read,FileShare.Read,1024*1024,FileOptions.SequentialScan))using(var hash=SHA256.Create()){byte[] buffer=new byte[1024*1024];int n;while((n=stream.Read(buffer,0,buffer.Length))>0){token.ThrowIfCancellationRequested();hash.TransformBlock(buffer,0,n,buffer,0);}hash.TransformFinalBlock(buffer,0,0);hashes.Add(new KeyValuePair<string,Entry>(Convert.ToBase64String(hash.Hash),e));}}catch(OperationCanceledException){throw;}catch(Exception ex){throw new IOException("Could not verify duplicate content: "+e.Path+" - "+ex.Message,ex);}}
+    var readable=new List<Entry>();foreach(Entry e in files){token.ThrowIfCancellationRequested();if(ContentReadable(e))readable.Add(e);else if(skipped!=null)skipped(e);}
+    var hashes=new List<KeyValuePair<string,Entry>>();var buffer=new byte[1024*1024];
+    foreach(var candidates in readable.GroupBy(e=>{token.ThrowIfCancellationRequested();return e.Size;}).Where(g=>g.Count()>1)){
+     // Samples only eliminate candidates. Every returned group has a full-file SHA-256 match.
+     bool sample=candidates.Key>2*SampleBytes;var samples=new List<KeyValuePair<string,Entry>>();
+     foreach(Entry e in candidates){string hash=ReadContentHash(e,sample,buffer,token,skipped);if(hash!=null)(sample?samples:hashes).Add(new KeyValuePair<string,Entry>(hash,e));}
+     if(sample)foreach(var matching in samples.GroupBy(p=>p.Key).Where(g=>g.Count()>1))foreach(var p in matching){string hash=ReadContentHash(p.Value,false,buffer,token,skipped);if(hash!=null)hashes.Add(new KeyValuePair<string,Entry>(hash,p.Value));}
+    }
     groups=hashes.GroupBy(p=>p.Key,p=>p.Value);
-   }else groups=files.GroupBy(e=>e.Name.ToLowerInvariant()+(mode=="Name"?"":"|"+e.Size)+(mode=="Name + size + modified"?"|"+e.Modified.Ticks:""));
-   foreach(var g in groups.Where(g=>g.Count()>1)){id++;foreach(Entry e in g){var r=Row(e);r.Extra="Group "+id+" | "+mode;rows.Add(r);}}
+   }else groups=files.GroupBy(e=>{token.ThrowIfCancellationRequested();return e.Name.ToLowerInvariant()+(mode=="Name"?"":"|"+e.Size)+(mode=="Name + size + modified"?"|"+e.Modified.Ticks:"");});
+   foreach(var g in groups.Where(g=>g.Count()>1)){id++;foreach(Entry e in g){token.ThrowIfCancellationRequested();var r=Row(e);r.Extra="Group "+id+" | "+mode;rows.Add(r);}}
+   token.ThrowIfCancellationRequested();
    return rows;
   }
+  private const int SampleBytes=64*1024;
+  private static string ReadContentHash(Entry e,bool sample,byte[] buffer,CancellationToken token,Action<Entry> skipped){
+   token.ThrowIfCancellationRequested();
+   try{
+    int attributes;if(!Native.TryGetDirectoryAttributes(e.Path,out attributes))throw new Win32Exception(Marshal.GetLastWin32Error());
+    if((attributes&((int)FileAttributes.ReparsePoint|(int)FileAttributes.Directory))!=0||Native.IsCloudPlaceholder(attributes,true)){if(skipped!=null)skipped(e);return null;}
+    using(var handle=Native.OpenContentFile(Util.LongPath(e.Path),0x80000000,1,IntPtr.Zero,3,0x00300000|(sample?0x10000000u:0x08000000u),IntPtr.Zero)){
+     if(handle.IsInvalid)throw new Win32Exception(Marshal.GetLastWin32Error());
+     Native.ContentFileInfo info;if(!Native.GetFileInformationByHandle(handle,out info))throw new Win32Exception(Marshal.GetLastWin32Error());
+     if((info.Attributes&((uint)FileAttributes.ReparsePoint|(uint)FileAttributes.Directory))!=0||Native.IsCloudPlaceholder((int)info.Attributes,false)){if(skipped!=null)skipped(e);return null;}
+     CheckContentInfo(e,info);
+     using(var stream=new FileStream(handle,FileAccess.Read,sample?SampleBytes:buffer.Length,false))using(var hash=SHA256.Create()){
+      HashBytes(stream,hash,buffer,sample?SampleBytes:e.Size,token);
+      if(sample){stream.Seek(e.Size-SampleBytes,SeekOrigin.Begin);HashBytes(stream,hash,buffer,SampleBytes,token);}
+      hash.TransformFinalBlock(buffer,0,0);
+      if(!Native.GetFileInformationByHandle(handle,out info))throw new Win32Exception(Marshal.GetLastWin32Error());CheckContentInfo(e,info);
+      return e.Size+"|"+Convert.ToBase64String(hash.Hash);
+     }
+    }
+   }catch(OperationCanceledException){throw;}catch(Exception ex){throw new IOException("Could not verify duplicate content: "+e.Path+" - "+ex.Message,ex);}
+  }
+  private static void CheckContentInfo(Entry e,Native.ContentFileInfo info){if((((long)info.SizeHigh<<32)|info.SizeLow)!=e.Size||Native.Time(info.Modified)!=e.Modified)throw new IOException(L.Chinese?"文件自扫描后已改变，请重新扫描。":"File changed since the scan. Re-scan before comparing content.");}
+  private static void HashBytes(Stream stream,HashAlgorithm hash,byte[] buffer,long count,CancellationToken token){while(count>0){token.ThrowIfCancellationRequested();int n=stream.Read(buffer,0,(int)Math.Min(buffer.Length,count));if(n==0)throw new EndOfStreamException("File changed while verifying duplicate content.");hash.TransformBlock(buffer,0,n,buffer,0);count-=n;}}
   public static List<ReportRow> Compare(Snapshot old,Snapshot current){var result=new List<ReportRow>();foreach(string path in old.Index.Keys.Union(current.Index.Keys,StringComparer.OrdinalIgnoreCase)){Entry a,b;old.Index.TryGetValue(path,out a);current.Index.TryGetValue(path,out b);long diff=(b==null?0:b.Size)-(a==null?0:a.Size);if(a==null||b==null||diff!=0||(a.Modified!=b.Modified)){result.Add(new ReportRow{Name=(b??a).Name,Size=diff,Allocated=(b==null?0:b.Allocated)-(a==null?0:a.Allocated),Count=(b==null?0:b.Files)-(a==null?0:a.Files),Path=path,Modified=(b??a).Modified,Extra=a==null?"Added":b==null?"Removed":"Changed",Source=b});}}return result.OrderByDescending(r=>Math.Abs(r.Size)).ToList();}
  }
  public class AppSettings {
